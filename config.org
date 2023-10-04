@@ -1,0 +1,532 @@
+TITLE: Kamron's Emacs Config
+#+AUTHOR: Kam
+#+DESCRIPTION: Emacs configuration
+#+STARTUP: 
+#+OPTIONS: toc:2
+
+* Initial Setup
+** Package Manager
+#+begin_src emacs-lisp
+(defvar elpaca-installer-version 0.5)
+(defvar elpaca-directory (expand-file-name "elpaca/" user-emacs-directory))
+(defvar elpaca-builds-directory (expand-file-name "builds/" elpaca-directory))
+(defvar elpaca-repos-directory (expand-file-name "repos/" elpaca-directory))
+(defvar elpaca-order '(elpaca :repo "https://github.com/progfolio/elpaca.git"
+                              :ref nil
+                              :files (:defaults (:exclude "extensions"))
+                              :build (:not elpaca--activate-package)))
+(let* ((repo  (expand-file-name "elpaca/" elpaca-repos-directory))
+       (build (expand-file-name "elpaca/" elpaca-builds-directory))
+       (order (cdr elpaca-order))
+       (default-directory repo))
+  (add-to-list 'load-path (if (file-exists-p build) build repo))
+  (unless (file-exists-p repo)
+    (make-directory repo t)
+    (when (< emacs-major-version 28) (require 'subr-x))
+    (condition-case-unless-debug err
+        (if-let ((buffer (pop-to-buffer-same-window "*elpaca-bootstrap*"))
+                 ((zerop (call-process "git" nil buffer t "clone"
+                                       (plist-get order :repo) repo)))
+                 ((zerop (call-process "git" nil buffer t "checkout"
+                                       (or (plist-get order :ref) "--"))))
+                 (emacs (concat invocation-directory invocation-name))
+                 ((zerop (call-process emacs nil buffer nil "-Q" "-L" "." "--batch"
+                                       "--eval" "(byte-recompile-directory \".\" 0 'force)")))
+                 ((require 'elpaca))
+                 ((elpaca-generate-autoloads "elpaca" repo)))
+            (progn (message "%s" (buffer-string)) (kill-buffer buffer))
+          (error "%s" (with-current-buffer buffer (buffer-string))))
+      ((error) (warn "%s" err) (delete-directory repo 'recursive))))
+  (unless (require 'elpaca-autoloads nil t)
+    (require 'elpaca)
+    (elpaca-generate-autoloads "elpaca" repo)
+    (load "./elpaca-autoloads")))
+(add-hook 'after-init-hook #'elpaca-process-queues)
+(elpaca `(,@elpaca-order))
+;; Install use-package support
+(elpaca elpaca-use-package
+;; Enable :elpaca use-package keyword.
+(elpaca-use-package-mode)
+;; Assume :elpaca t unless otherwise specified.
+(setq elpaca-use-package-by-default t))
+
+(elpaca-wait)
+#+end_src
+** Evil Mode
+#+begin_src emacs-lisp
+  (use-package evil 
+      :init
+      (setq evil-want-integration t)
+      (setq evil-want-keybinding nil)
+      (setq evil-vsplit-window-right t)
+      (setq evil-split-window-below nil)
+      (evil-mode)
+      :config
+      (evil-define-key 'normal dired-mode-map
+         (kbd "f") 'dired-up-directory
+         (kbd "a") 'dired-open-file
+         (kbd "C") 'dired-do-copy
+         (kbd "D") 'dired-do-delete
+         (kbd "t") 'dired-create-empty-file
+         (kbd "T") 'dired-create-directory
+         (kbd "R") 'dired-do-rename
+         (kbd "N") 'dired-goto-file
+         (kbd "m") 'dired-mark
+         (kbd "p") 'dired-display-file
+         (kbd "s") 'dired-do-shell-command)
+
+      (evil-define-key '(normal visual) 'global 
+        (kbd "n") 'evil-next-line
+        (kbd "e") 'evil-previous-line
+        (kbd "s") 'avy-goto-char-timer
+        (kbd "S") 'evil-avy-goto-line)
+
+     (evil-define-key '(normal visual) org-mode-map
+        (kbd "TAB") 'org-cycle
+        (kbd "M-<up>") 'org-move-item-up
+        (kbd "M-<down>") 'org-move-item-down
+        (kbd "M-S-<up>") 'org-move-subtree-up
+        (kbd "M-S-<down>") 'org-move-subtree-down)
+
+     (evil-define-key '(normal visual) calibredb-search-mode-map
+        (kbd "o") 'calibredb-open-file-with-default-tool))
+
+  (use-package evil-collection
+    :after evil
+    :config
+    (setq evil-collection-mode-list '(dashboard dired ibuffer help magit themes))
+    (evil-collection-init))
+  (use-package evil-commentary
+    :after evil
+    :config
+    (evil-commentary-mode))
+  (use-package evil-surround
+    :after evil
+    :ensure t
+    :config
+    (global-evil-surround-mode 1))
+  (use-package evil-textobj-tree-sitter
+    :after evil
+    :ensure t)
+#+end_src
+** Leader key
+#+begin_src emacs-lisp
+(use-package general
+  :config
+  (general-evil-setup)
+  (general-create-definer leader-key
+  :states '(normal insert visual emacs)
+  :keymaps 'override
+  :prefix "SPC" ;; space as the leader key
+  :global-prefix "M-SPC")
+
+  (leader-key
+     "." '(find-file :wk "Find file")
+     "w" '(evil-write :wk "Write file")
+     "<backspace>" '(evil-window-prev :wk "Alternate window")
+     "SPC" '(execute-extended-command :wk "M-x")
+     "u" '(universal-argument :wk "Universal argument")
+     "ESC" '(embark-act :wk "Embark"))
+
+  (leader-key
+     "e" '(:ignore t :wk "Eval")
+     "e b" '(eval-buffer :wk "Evaluate the current buffer")
+     "e d" '(eval-defun :wk "Evaluate defun containing or after point")
+     "e e" '(eval-expression :wk "Evaluate an elisp expression")
+     "e l" '(eval-last-sexp :wk "Evaluate elisp expression before point")
+     "e r" '(eval-region :wk "Evaluate elisp in region"))
+
+  (leader-key
+     "f" '(:ignore t :wk "Find")
+     "f f" '(consult-ripgrep :wk "Ripgrep across the root directory")
+     "f m" '(consult-imenu :wk "Navigate the document") 
+     "f c" '((lambda () (interactive) (find-file "~/.config/emacs/config.org")) :wk "Edit Emacs config"))
+
+  (leader-key
+     "h" '(:ignore t :wk "Help")
+     "h f" '(describe-function :wk "Describe an elisp function")
+     "h v" '(describe-variable :wk "Describe an elisp variable")
+     "h k" '(describe-key :wk "Describe a keybinding")
+     "h m" '(describe-mode :wk "Describe a major or minor mode")
+     "h M" '(info-emacs-manual :wk "The Emacs manual")
+     "h c" '(describe-char :wk "Describe the character at the point")
+     "h r r" '((lambda () (interactive) (load-file "~/.config/emacs/init.el")) :wk "Reload Emacs config file")
+     "h w" '(where-is :wk "Where is the given command bound to")
+     "h a" '(info-apropos :wk "Search the Emacs manual"))
+
+  (leader-key
+     "b" '(:ignore t :wk "Buffer")
+     "b b" '(switch-to-buffer :wk "Switch to buffer")
+     "b i" '(ibuffer :wk "Ibuffer")
+     "b k" '(kill-this-buffer :wk "Kill the current buffer")
+     "b p" '(previous-buffer :wk "Previous buffer")
+     "b n" '(next-buffer :wk "Next buffer"))
+
+  (leader-key
+   "t" '(:ignore t :wk "Toggle")
+   "t n" '(display-line-numbers-mode :wk "Toggle line numbers")
+   "t t" '(ansi-term :wk "Toggle a terminal")
+   "t o" '(olivetti-mode :wk "Toggle Olivetti mode")
+   "t d" '(dired-jump :wk "Toggle Dired in the current directory")
+   "t a" '(modus-themes-toggle :wk "Toggle between day and night themes")
+   "t e" '(eshell :wk "Toggle an Eshell buffer"))
+
+  (leader-key
+   "d" '(:ignore t :wk "Window")
+   "d h" '(evil-window-left :wk "Window left")
+   "d f" '(evil-window-left :wk "Window left")
+   "d j" '(evil-window-down :wk "Window down")
+   "d n" '(evil-window-down :wk "Window down")
+   "d k" '(evil-window-up :wk "Window up")
+   "d e" '(evil-window-up :wk "Window up")
+   "d l" '(evil-window-right :wk "Window right")
+   "d a" '(evil-window-right :wk "Window right")
+   "d w" '(evil-window-new :wk "New window")
+   "d k" '(evil-window-delete :wk "Close window")
+   "d s" '(evil-window-split :wk "Split window"))
+
+  (leader-key
+   "o" '(:ignore t :wk "Org")
+   "o c" '(org-roam-node-find :wk "Find an org roam node")
+   "o d" '(org-roam-node-insert :wk "Insert an org roam node")
+   "o n" '(org-roam-buffer-toggle :wk "Toggle an org roam buffer") 
+   "o h" '((lambda () (interactive) (find-file "~/Documents/Zettelkasten/Main/home.org")) :wk "Open notes")
+   "o s" '((lambda () (interactive) (find-file "~/Documents/Zettelkasten/inbox.org")) :wk "Create a quick note"))
+  
+
+  (leader-key
+   "g" '(:ignore t :wk "Git")
+   "g s" '(magit-status :wk "Git status")))
+  
+(global-set-key (kbd "C-=") 'text-scale-increase)
+(global-set-key (kbd "C--") 'text-scale-decrease)
+(global-set-key (kbd "C-<prior>") 'text-scale-increase)
+(global-set-key (kbd "C-<next>") 'text-scale-decrease)
+#+end_src
+* Packages and settings
+** Emacs
+*** Settings
+#+begin_src emacs-lisp
+  (menu-bar-mode 1)
+
+  (scroll-bar-mode -1)
+  (tool-bar-mode -1)
+
+  ;; Toggle linenumbers and line wrap
+  (global-visual-line-mode 1)
+
+  (setq inhibit-startup-message t
+        initial-scratch-message nil
+        use-short-answers t
+        pixel-scroll-precision-mode t)
+
+  (require 'org-tempo)
+
+  (set-fringe-mode 10)
+  (electric-pair-mode 1)
+  (electric-indent-mode -1)
+
+  (defun prefer-horizontal-split ()
+     (set-variable 'split-height-threshold nil t)
+     (set-variable 'split-width-threshold 40 t)) ;; 
+  (add-hook 'org-mode-hook 'prefer-horizontal-split)
+
+  (defun reload-init-file ()
+     "Reload the users init file"
+     (interactive)
+     (load-file user-init-file)
+     (load-file user-init-file))
+#+end_src
+** Org
+*** Packages and settings
+**** TOC
+#+begin_src emacs-lisp
+(use-package toc-org
+  :commands toc-org-enable
+  :init (add-hook 'org-mode-hook 'toc-org-enable))
+
+(add-hook 'org-mode-hook 'org-indent-mode)
+#+end_src
+**** Pomodoro
+#+begin_src emacs-lisp
+(use-package org-pomodoro)
+#+end_src
+**** Noter
+Allows synchronized annotation of documents within org mode
+#+begin_src emacs-lisp
+  (use-package org-noter)
+  (use-package org-roam
+    :ensure t
+    :custom
+    (org-roam-directory (file-truename "~/Documents/Zettelkasten/"))
+    (org-roam-completion-everywhere t)
+    (org-roam-capture-templates
+      '(("d" "default" plain
+         "%?"
+         :if-new (file+head "Main/${slug}.org" "#+title: ${title}\n#+filetags: \n#+date: %U\n")
+         :immediate-finish t
+         :unnarrowed t)
+        ("r" "Reference note" plain "%?"
+         :if-new
+         (file+head "Reference/${title}.org" "#+title: ${title}\n#+filetags: \n#+date: %U\n")
+         :immediate-finish t
+         :unnarrowed t)))
+    :config
+    (setq org-roam-node-display-template (concat "${title:*} " (propertize "${tags:10}" 'face 'org-tag)))
+           (org-roam-db-autosync-mode)
+    (require 'org-roam-protocol)
+    (org-roam-setup))
+
+    (use-package org-modern)
+    (add-hook 'org-mode-hook #'org-modern-mode)
+    (add-hook 'org-agenda-finalize-hook #'org-modern-agenda)
+
+    (use-package org-anki)
+ #+end_src
+**** Org Modern
+#+begin_src emacs-lisp
+(setq org-hide-emphasis-markers t)
+#+end_src
+**** Org Roam
+#+begin_src emacs-lisp
+#+end_src>
+**** Bibliography
+
+**** Settings
+#+begin_src emacs-lisp
+(require 'org-tempo)
+(setq
+  org-auto-align-tags nil
+  org-tags-column 0
+  org-catch-invisible-edits 'show-and-error
+  org-insert-heading-respect-content t
+  org-special-ctrl-a/e t
+  org-hide-emphasis-markers t
+  org-ellipsis "...")
+  #+end_src>
+** Dired
+*** Settings
+#+begin_src emacs-lisp
+  (setq dired-kill-when-opening-new-dired-buffer t)
+#+end_src
+** Magit
+#+begin_src emacs-lisp
+  (use-package magit
+   :ensure t)
+#+end_src
+** Whichkey
+#+begin_src emacs-lisp
+(use-package which-key
+  :init
+    (which-key-mode 1)
+  :config
+  (setq which-key-side-window-location 'bottom
+        which-key-sort-order #'which-key-key-order-alpha
+        which-key-sort-uppercase-first nil
+        which-key-add-column-padding 1
+        which-key-max-display-columns nil
+        which-key-min-display-lines 6
+        which-key-side-window-slot -10
+        which-key-side-window-max-height 0.25
+        which-key-idle-delay .8
+        which-key-max-description-length 25
+        which-key-allow-imprecise-window-fit t))
+#+end_src
+** Tramp
+** Vertico
+#+begin_src emacs-lisp
+  (use-package vertico
+    :init
+    (vertico-mode))
+#+end_src
+** Embark
+Embark-act is the "yes, but first..." command. I called "find-file" but first I'd like to copy it else where to be safe.
+#+begin_src emacs-lisp
+(use-package embark
+  :ensure t)
+
+(use-package embark-consult
+  :ensure t
+  :hook
+  (embark-collect-mode . consult-preview-at-point-mode))
+#+end_src
+** Link-hint
+** Avy 
+Jumps
+#+begin_src emacs-lisp
+  (use-package avy
+    :config
+    (setq avy-keys '(?d ?n ?r ?e ?t ?a ?s ?i)
+          avy-style 'de-bruijn
+          avy-timeout 1.0))
+#+end_src
+** Consult 
+Searches
+#+begin_src emacs-lisp
+(use-package consult)
+#+end_src
+** Corfu
+Enhances in-buffer completion
+#+begin_src emacs-lisp
+(use-package corfu
+  :init 
+  (global-corfu-mode))
+#+end_src
+** Marginalia
+Provides descriptions of functions of functions in completion buffers
+#+begin_src emacs-lisp
+(use-package marginalia
+  :ensure t
+  :config
+  (marginalia-mode))
+#+end_src
+** Orderless
+Completions can be matched in any order
+#+begin_src emacs-lisp
+(use-package orderless
+  :ensure t
+ :custom
+  (completion-styles '(orderless basic))
+  (completion-category-overrides '((file (styles basic partial-completion)))))
+#+end_src
+** Calibre
+#+begin_src emacs-lisp
+(use-package calibredb
+  :defer t
+  :config
+  (setq calibredb-root-dir "~/Documents/Books/")
+  (setq calibredb-db-dir (expand-file-name "metadata.db" calibredb-root-dir))
+  (setq calibredb-library-alist '(("~/Documents/Books"))))
+#+end_src
+** Pdf-tools
+#+begin_src emacs-lisp
+  (use-package pdf-tools
+    :config
+    (pdf-tools-install))
+#+end_src
+** Nov.el
+#+begin_src emacs-lisp
+(use-package nov)
+(add-to-list 'auto-mode-alist '("\\.epub\\'" . nov-mode))
+#+end_src
+** Olivetti
+#+begin_src emacs-lisp
+(use-package olivetti)
+#+end_src
+** Dashboard
+#+begin_src emacs-lisp
+  (use-package dashboard
+    :elpaca t
+    :ensure t
+    :config
+    (add-hook 'elpaca-after-init-hook #'dashboard-insert-startupify-lists)
+    (add-hook 'elpaca-after-init-hook #'dashboard-initialize)
+    (setq dashboard-set-heading-icons t
+          dashboard-set-file-icons t
+          dashboard-banner-logo-title "\"I use Emacs, which might be thought of as a thermonuclear word processor\""
+          dashboard-center-content t
+          dashboard-set-footer nil
+          dashboard-show-shortcuts nil
+          dashboard-set-heading-icons t
+          dashboard-set-file-icons t))
+#+end_src
+** Projectile
+#+begin_src emacs-lisp
+#+end_src
+* Themes and fonts
+** Theme
+#+begin_src emacs-lisp
+  (add-to-list 'load-path "~/.config/emacs/modus-themes")
+  (require 'modus-themes)
+
+  (setq modus-themes-headings '((1 . (variable-pitch 1.3))
+                                (2 . (1.1))
+                                (t . (1.0)))
+        modus-themes-italic-constructs t
+        ;; modus-themes-bold-constructs t
+        modus-themes-mixed-fonts t)
+
+  (setq modus-vivendi-palette-overrides
+    '(
+       (bg-main "#1e1e1e")
+       (fg-main "#cdd6f4")
+       (cursor yellow-warmer)
+       (border-mode-line-active bg-main)
+       (border-mode-line-inactive bg-main)
+       (fg-heading-2 "#f7da4e") 
+       (variable "#ddcd79")
+       (keyword "#21efef")
+       (builtin "#c66525")
+       (string "#fab387")
+       (dashboard-heading "#f7da4e")
+       (constant "#cba6f7")))
+
+  (setq modus-operandi-palette-overrides
+    '(
+       (border-mode-line-active bg-dim)
+       (border-mode-line-inactive bg-main)
+       (fg-heading-2 "#04a5e5")
+       (bg-main "#eff1f5")
+       (fg-main "#4c4f69")
+       (variable "#df8e1d")
+       (keyword "#8839ef")
+       (builtin "#c66525")
+       (string "#e64553")))
+
+  (load-theme 'modus-vivendi :no-confirm)
+#+end_src
+** Fonts
+#+begin_src emacs-lisp
+(set-face-attribute 'default nil
+  :font "SauceCodePro Nerd Font"
+  :height 200
+  :weight 'medium)
+(set-face-attribute 'variable-pitch nil
+  :font "SourceCodeVF"
+  :height 200
+  :weight 'medium)
+(set-face-attribute 'fixed-pitch nil
+  :font "Source Code Pro"
+  :height 200
+  :weight 'medium)
+#+end_src
+** Modeline
+#+begin_src emacs-lisp
+  (use-package doom-modeline
+    :ensure t
+    :init
+    (doom-modeline-mode 1)
+    :config
+    (setq doom-modeline-height 25
+          doom-modeline-buffer-encoding nil))
+ #+end_src 
+** Icons
+#+begin_src emacs-lisp
+    (use-package all-the-icons
+      :if (display-graphic-p)
+      :commands all-the-icons-install-fonts
+      :init
+      (unless (find-font (font-spec :name "all-the-icons"))
+        (all-the-icons-install-fonts t)))
+
+    (use-package all-the-icons-dired
+      :if (display-graphic-p)
+      :hook (dired-mode . all-the-icons-dired-mode))
+
+    (use-package nerd-icons
+      :config
+      (setq nerd-icons-font-family "SauceCodePro Nerd Font"))
+#+end_src
+* Shells and terminals
+Shell mode is a good terminal repleacement, but it isnt meant to be used with interactive shell programs like /top/.
+* Language support
+#+begin_src emacs-lisp
+ (use-package rust-mode)
+ (use-package markdown-mode)
+#+end_src
+* Custom Functions
+#+begin_src emacs-lisp
+  (defun kam/org-capture-slipbox
+    (interactive)
+    (org-capture nil "s"))
+#+end_src
