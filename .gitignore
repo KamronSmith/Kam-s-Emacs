@@ -1,0 +1,17 @@
+/config.el
+/config.org~
+/.org-id-locations
+/nov-places
+/org-roam.db
+/tree-sitter/
+/transient/
+/auto-save-list/
+/elpa/
+/elgrep-data.el
+/elpaca/
+/eshell/
+/recentf
+/backups/
+/bookmarks~
+/modus-themes/
+/projectile-bookmarks.eld
