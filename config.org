@@ -128,7 +128,7 @@ TITLE: Kamron's Emacs Config
        "s" '(shell-command :wk "Run a shell command"))
 
     (leader-key
-       "e" '(:ignore t :wk "Eval")
+      "e" '(:ignore t :wk "Eval")
        "e b" '(eval-buffer :wk "Evaluate the current buffer")
        "e d" '(eval-defun :wk "Evaluate defun containing or after point")
        "e e" '(eval-expression :wk "Evaluate an elisp expression")
@@ -164,7 +164,7 @@ TITLE: Kamron's Emacs Config
     (leader-key
        "t" '(:ignore t :wk "Toggle")
        "t n" '(display-line-numbers-mode :wk "Toggle line numbers")
-       "t t" '(ansi-term :wk "Toggle a terminal")
+       "t t" '(vterm :wk "Toggle a terminal")
        "t o" '(olivetti-mode :wk "Toggle Olivetti mode")
        "t d" '(dired-jump :wk "Toggle Dired in the current directory")
        "t a" '(modus-themes-toggle :wk "Toggle between day and night themes")
@@ -191,7 +191,8 @@ TITLE: Kamron's Emacs Config
      "o d" '(org-roam-node-insert :wk "Insert an org roam node")
      "o n" '(org-roam-buffer-toggle :wk "Toggle an org roam buffer") 
      "o h" '((lambda () (interactive) (find-file "~/Documents/03 Resources/Zettelkasten/Main/home.org")) :wk "Open notes")
-     "o s" '((lambda () (interactive) (find-file "~/Documents/03 Resources/Zettelkasten/inbox.org")) :wk "Create a quick note"))
+     "o s" '((lambda () (interactive) (find-file "~/Documents/03 Resources/Zettelkasten/inbox.org")) :wk "Create a quick note")
+     "o p" '(org-pomodoro :wk "Start a pomodoro session"))
 
 
     (leader-key
@@ -250,6 +251,7 @@ TITLE: Kamron's Emacs Config
 **** Pomodoro
 #+begin_src emacs-lisp
 (use-package org-pomodoro)
+
 #+end_src
 **** Noter
 Allows synchronized annotation of documents within org mode
@@ -287,9 +289,6 @@ Allows synchronized annotation of documents within org mode
 #+begin_src emacs-lisp
 (setq org-hide-emphasis-markers t)
 #+end_src
-**** Org Roam
-#+begin_src emacs-lisp
-#+end_src>
 **** Bibliography
 
 **** Settings
@@ -412,7 +411,7 @@ Completions can be matched in any order
 (use-package calibredb
   :defer t
   :config
-  (setq calibredb-root-dir "~/Documents/Books/")
+  (setq calibredb-root-dir "~/Documents/03 Resources/Books")
   (setq calibredb-db-dir (expand-file-name "metadata.db" calibredb-root-dir))
   (setq calibredb-library-alist '(("~/Documents/Books"))))
 #+end_src
@@ -471,22 +470,28 @@ Completions can be matched in any order
                                 (t . (1.0)))
         modus-themes-italic-constructs t
         ;; modus-themes-bold-constructs t
-        modus-themes-mixed-fonts t)
+        modus-themes-mixed-fonts t
+        modus-themes-mode-line '(padding . 1.2)
+        modus-themes-org-blocks 'gray-background)
 
   (setq modus-vivendi-palette-overrides
     '(
-       (bg-main bg-dim)
+       (bg-main "#2e323c")
        (fg-main "#cdd6f4")
        (cursor yellow-warmer)
+       (bg-mode-line-active "#1e242a")
        (border-mode-line-active bg-main)
        (border-mode-line-inactive bg-main)
        (fg-heading-2 "#f7da4e") 
        (variable "#ddcd79")
        (keyword "#21efef")
        (builtin "#c66525")
+       (fringe bg-main)
        (string "#fab387")
        (dashboard-heading "#f7da4e")
-       (constant "#cba6f7")))
+       (constant "#cba6f7")
+       (prose-block green)
+       (prose-code green)))
 
   (setq modus-operandi-palette-overrides
     '(
@@ -499,6 +504,10 @@ Completions can be matched in any order
        (keyword "#8839ef")
        (builtin "#c66525")
        (string "#e64553")))
+  
+  (setq org-src-block-faces
+        '(("code" (:background "#1e242a"))
+          ("emacs-lisp" (:background "#1e242a"))))
 
   (load-theme 'modus-vivendi :no-confirm)
 #+end_src
